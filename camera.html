@@ -39,6 +39,10 @@ html, body { background: #0f1f3d; color: #e8edf5; font-family: 'Barlow', sans-se
 .filter-bar { display:flex;gap:8px;flex-wrap:wrap;align-items:center; }
 .filter-btn { background:#1e3452;border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:5px 12px;font-size:10px;color:#7a94b4;font-family:'Barlow Condensed',sans-serif;cursor:pointer;letter-spacing:.5px;transition:all .15s; }
 .filter-btn:hover,.filter-btn.active { background:#e8a020;color:#0f1f3d;border-color:#e8a020; }
+.tag-select { background:#1e3452;border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:5px 30px 5px 12px;font-size:10px;color:#e8edf5;font-family:'Barlow Condensed',sans-serif;cursor:pointer;letter-spacing:.5px;transition:all .15s;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M1 3l4 4 4-4' stroke='%237a94b4' stroke-width='1.5' fill='none'/></svg>");background-repeat:no-repeat;background-position:right 11px center; }
+.tag-select:hover { border-color:rgba(255,255,255,0.25); }
+.tag-select:focus { outline:none;border-color:#e8a020; }
+.tag-select option { background:#162840;color:#e8edf5; }
 .group-btn { background:#1e3452;border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:6px 16px;font-size:11px;color:#7a94b4;font-family:'Barlow Condensed',sans-serif;cursor:pointer;letter-spacing:.5px;transition:all .15s;font-weight:600; }
 .group-btn:hover { background:#244a72;border-color:rgba(255,255,255,0.2); }
 .group-btn.active-all { background:#e8a020;color:#0f1f3d;border-color:#e8a020; }
@@ -124,6 +128,8 @@ html, body { background: #0f1f3d; color: #e8edf5; font-family: 'Barlow', sans-se
       <button class="filter-btn active" data-filter="all">All Events</button>
       <button class="filter-btn" data-filter="Coached">&#10003; Viewed</button>
       <button class="filter-btn" data-filter="Needs Coaching">&#9888; Unviewed</button>
+      <span style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:#7a94b4;margin-left:14px;margin-right:4px;">Location:</span>
+      <select class="tag-select" id="tagFilter"><option value="all">All Locations</option></select>
     </div>
   </div>
 
@@ -342,6 +348,7 @@ var currentEvts=[];
 var currentFilter='all';
 var allFilteredEvts=[];
 var currentGroup='all';
+var currentTag='all';
 var allBaseEvts=[];
 // Active date window — set by renderWithDateFilter so render() can fill empty weeks
 var windowStartD=null, windowEndD=null;
@@ -355,6 +362,37 @@ function getDriverGroup(evt){
   if(/^TT[\s\.\-_]?/.test(veh)) return 'HD';
   if(dtags.indexOf('TT DRIVERS')>=0 || devtags.indexOf('TT DRIVERS')>=0) return 'HD';
   return 'LD';
+}
+
+// Location tags come from the Samsara "Driver Tags" column (e.g. SEA, PDX).
+// A driver may carry more than one, comma-separated, so return them as a list.
+function getEventTags(evt){
+  return String(evt['Driver Tags']||'')
+    .split(',')
+    .map(function(t){return t.trim();})
+    .filter(function(t){return t.length>0;});
+}
+
+// Rebuild the Location pulldown from the current dataset, listed alphabetically.
+// Keeps the current selection if it still exists, otherwise falls back to "all".
+function populateTagFilter(evts){
+  var sel=document.getElementById('tagFilter');
+  if(!sel) return;
+  var seen={};
+  for(var i=0;i<evts.length;i++){
+    var tags=getEventTags(evts[i]);
+    for(var j=0;j<tags.length;j++) seen[tags[j]]=1;
+  }
+  var opts=Object.keys(seen).sort(function(a,b){
+    return a.localeCompare(b,undefined,{sensitivity:'base'});
+  });
+  if(currentTag!=='all' && !seen[currentTag]) currentTag='all';
+  var html='<option value="all">All Locations</option>';
+  for(var k=0;k<opts.length;k++){
+    var v=opts[k].replace(/"/g,'&quot;');
+    html+='<option value="'+v+'"'+(opts[k]===currentTag?' selected':'')+'>'+v+'</option>';
+  }
+  sel.innerHTML=html;
 }
 
 function render(evts){
@@ -543,6 +581,7 @@ function renderWithDateFilter(allEvts){
   allFilteredEvts=tr;
   windowStartD=startD;
   windowEndD=endD;
+  populateTagFilter(tr);
   updateGroupCounts(tr);
   applyGroupAndFilter();
   var fmt=function(x){return x.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'});};
@@ -559,6 +598,10 @@ function applyGroupAndFilter(){
     grouped=allBaseEvts.filter(function(e){return getDriverGroup(e)==='LD';});
   } else {
     grouped=allBaseEvts;
+  }
+  // Then apply the Location (Driver Tag) filter
+  if(currentTag!=='all'){
+    grouped=grouped.filter(function(e){return getEventTags(e).indexOf(currentTag)>=0;});
   }
   allFilteredEvts=grouped;
   applyFilter();
@@ -874,6 +917,12 @@ document.getElementById('filterBar').addEventListener('click',function(e){
   btn.classList.add('active');
   currentFilter=btn.getAttribute('data-filter');
   applyFilter();
+});
+
+// Location (Driver Tag) pulldown
+document.getElementById('tagFilter').addEventListener('change',function(){
+  currentTag=this.value;
+  applyGroupAndFilter();
 });
 
 // Group filter buttons
